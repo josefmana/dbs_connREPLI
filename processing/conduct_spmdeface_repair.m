@@ -1,0 +1,16 @@
+spm_deface( {
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN196/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN261/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN318/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN327/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN334/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN343/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN347/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN388/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN390/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN526/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN541/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN584/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN588/anat_t1.nii'
+'/Users/josefmana/Desktop/crusades/dbs_mriCONN_replicate/data/mri/IPN597/anat_t1.nii'
+} )

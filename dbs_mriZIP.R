@@ -1,5 +1,5 @@
 setwd( dirname(rstudioapi::getSourceEditorContext()$path) ) # set working directory (works only in RStudio)
-data.dir <- "data" # where the data is?
+data.dir <- "data/mri" # where the data is?
 
 # conduct zipping for all the data inside the data folder
 lapply( list.files(data.dir), # zip only BIDS data

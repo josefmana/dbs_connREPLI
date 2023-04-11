@@ -1,0 +1,172 @@
+# This is a script used to prepare the data for the replication study of presumed predictive value of specific
+# fMRI connectivity patterns of stimulated parts of STN in STN DBS in PD for motor, cognitive and affective outcomes.
+
+# The goals of this script are:
+# (i) deface MRIs of patients that were not defaced previously,
+# (ii) document quality checks and pre-processing steps in Lead-DBS leading to extraction of volumes of activated tissue (VATs),
+# (iii) shuffle the files so that they end up in the right places.
+
+# list packages to be used
+pkgs <- c("rstudioapi", # setting working directory via RStudio API
+          "dplyr", "tidyverse", # data wrangling
+          "RNifti" # R-native NIfTI tools
+          )
+
+# load or install each of the packages as needed
+for ( i in pkgs ) {
+  if ( i %in% rownames( installed.packages() ) == F ) install.packages(i) # install if it ain't installed yet
+  if ( i %in% names( sessionInfo()$otherPkgs ) == F ) library( i , character.only = T ) # load if it ain't loaded yet
+}
+
+# set working directory (works in RStudio only)
+setwd( dirname(getSourceEditorContext()$path) )
+
+# write down some important parameters
+d.dir <- "data/mri" # Where the MRI data is?
+
+# read patients identificators
+d.out <- read.csv( "data/dbs_connREPLI_outcome_data.csv", sep = ";" ) # outcome data
+d.def <- read.csv( "data/dbs_connREPLI_pats2deface.csv", header = F )$V1 # patients to deface
+
+
+# ---- defacing via spm_deface ----
+
+# write a MatLab script for spm_deface
+writeLines( paste0( "spm_deface( {\n",
+                    paste( paste0("'", getwd(), "/data/mri/", paste0( d.def, "/anat_t1.nii" ),"'"),
+                           collapse = "\n"),
+                    "\n} )"
+                    ), con = "processing/conduct_spmdeface.m" )
+
+# go to MatLab and run the code there
+
+# remove original (faced) T1s and rename the new (defaced) T1s appropriately
+for ( i in d.def ) {
+  
+  # do not run if the data were already processed via Lead-DBS (i.e., the original file was renamed to "raw_anat_t1.nii")
+  if ( !file.exists( paste0( d.dir, "/", i, "/raw_anat_t1.nii" ) ) ) {
+    
+    file.remove( paste0( d.dir, "/", i, "/anat_t1.nii" ) ) # remove the original
+    file.rename( from = paste0(d.dir,"/",i,"/anon_anat_t1.nii"), to = paste0(d.dir,"/",i,"/anat_t1.nii") ) # rename the defaced file
+    
+  }
+}
+
+
+# ---- extract patients who will be included ----
+
+# keep only pre- and r1- assessments which are to be included
+d.out <- d.out[ d.out$ass %in% c("pre","r1") , ]
+
+# exclude patients with no pre- or post-test
+d.out <- d.out[ !( d.out$id %in% ( which( table(d.out$id) < 2 ) %>% names() ) ) , ]
+
+# remove MRIs of excluded patients
+for( i in list.files( d.dir, recursive = F )[ !( list.files( d.dir, recursive = F ) %in% unique(d.out$id) ) ] ) unlink( paste0( d.dir, "/", i ), recursive = T )
+
+
+# ---- coregistration via LeadDBS ----
+
+# run "processing/dbs_connREPLI_leaddbs_coregistration.m"
+# because I accidentally overwrote the defaced patients, had to run "processing/dbs_connREPLI_leaddbs_coregistration_repair.m" as well
+
+# read-out the summary of coregistration
+d.cor <- read.csv( "data/dbs_connREPLI_coregistration_sum.csv", sep = "," )
+
+# try different algorithms for patients with unsuccessful coregistration and list the results
+d.cor <- d.cor %>% mutate( t2_action = case_when( id %in% c("IPN195","IPN263") ~ "fsl_flirt", id == "IPN214" ~ "spm&ants" ),
+                           ct_action = case_when( id == "IPN211" ~ "fsl_flirt" )
+                           )
+
+
+# ---- normalization via LeadDBS ----
+
+# run "processing/dbs_connREPLI_leaddbs_normalization.m"
+# because I accidentally overwrote the defaced patients, had to run "processing/dbs_connREPLI_leaddbs_normalization_repair.m" as well
+
+# read-out the summary of normalization
+d.nor <- read.csv( "data/dbs_connREPLI_normalization_sum.csv", sep = "," )
+
+
+# ---- electrode localization via LeadDBS ----
+
+# print patients according to the electrodes for Lead pre-reconstruction
+with( d.out, id[ grepl( "st.jude|cardion", stim_pars.electrode ) ] ) %>% sort() # St. Jude, N = 35
+with( d.out, id[ grepl( "medtronic_3389", stim_pars.electrode ) ] ) %>% sort() # Medtronic 3389, N = 26
+with( d.out, id[ grepl( "medtronic_B33005", stim_pars.electrode ) ] ) %>% sort() # Medtronic B33005, N = 1
+
+# this one is done manually via LeadDBS in MatLab
+
+# read-out the summary of localization
+d.loc <- read.csv( "data/dbs_connREPLI_localization_sum.csv", sep = "," )
+
+
+# ---- VATs calculation via LeadDBS, round #1 ----
+
+# first, trim down to only patients with nice looking data
+d.loc[ d.loc$loc_quality %in% c("bad","thrash"), "id" ] # do not calculate VATs for thrash localizations if there are any
+d.out[ d.out$ass == "r1" & is.na(d.out$stim_pars.right_neg_cont) , "id" ] # patients with missing stimulation parameters
+
+# read-out the summary of VAT calculation
+d.stim <- read.csv( "data/dbs_connREPLI_stimulation_sum.csv", sep = "," )
+
+
+# ---- preliminary pre-processing summary ----
+
+# put summary of all pre-processing steps into a single object
+d.sum <- left_join( d.cor, d.nor, by = "id" ) %>% left_join( d.loc, by = "id" ) %>% left_join( d.stim, by = "id" )
+
+# prepare sums scores for each outcome
+# starting with neuropsychology
+for ( i in c("drs","bdi") ) d.out[[paste0("psych.",i)]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
+
+# continue with motor scores
+d.out <- d.out %>% mutate(
+  # create a new variable with MDS-UPDRS III (after transformation from the old UPDRS III un some cases)
+  motor.mds_updrs_iii =
+    case_when( ass == "pre" ~ motor.med_off, ass == "r1" ~ motor.stim_on ) + # raw score
+    case_when( motor.ldopa_test == "updrs_iii" ~ 7, motor.ldopa_test == "mds_updrs_iii" | is.na(motor.ldopa_test) ~ 0 ) # add seven for patients with the old UPDRS III
+  
+  )
+
+# print all new patients that are already done
+d.out[ d.out$id %in% with( d.sum, id[ stim_orig == 0 & stim_new != 0]) , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>%
+  # change to a wide format
+  pivot_wider( id_cols = "id", names_from = "ass", values_from = c("psych.drs","psych.bdi","motor.mds_updrs_iii") )
+
+# next print all new patients that I failed to pre-process so far
+d.out[ d.out$id %in% with( d.sum, id[ stim_orig == 0 & stim_new == 0]) , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>%
+  # change to a wide format
+  pivot_wider( id_cols = "id", names_from = "ass", values_from = c("psych.drs","psych.bdi","motor.mds_updrs_iii") )
+
+
+# ---- repeated pre-processing of patients with better CT ----
+
+# some patients had bad quality, CT, got better images and repeating the pre-processing
+
+# print IDs of patients to be repaired
+r.id <- c( d.sum[ d.sum$loc_quality %in% c("thrash","bad"), "id" ], "IPN347" ) %>% sort() %>% as.data.frame() %>% filter( !grepl("244|256|279" , .) )
+
+# deface the patients to be repaired
+writeLines( paste0( "spm_deface( {\n",
+                    paste( paste0("'", getwd(), "/data/mri/", paste0( r.id$., "/anat_t1.nii" ),"'"),
+                           collapse = "\n"),
+                    "\n} )"
+                    ), con = "conduct_spmdeface_repair.m" )
+
+# go to MatLab and run the code there
+
+# remove original (faced) T1s and rename the new (defaced) T1s appropriately
+for ( i in r.id$. ) {
+  # do not run if the data were already processed via Lead-DBS (i.e., the original file was renamed to "raw_anat_t1.nii")
+  if ( !file.exists( paste0("data/mri/", i, "/raw_anat_t1.nii" ) ) ) {
+    file.remove( paste0("data/mri/", i, "/anat_t1.nii" ) ) # remove the original
+    file.rename( from = paste0("data/mri/",i,"/anon_anat_t1.nii"), to = paste0("data/mri/",i,"/anat_t1.nii") ) # rename the defaced file
+  }
+}
+
+# print patients according to the electrodes for Lead pre-reconstruction
+with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ grepl( "st.jude|cardion", stim_pars.electrode ) ] ) %>% sort() # St. Jude, N = 8
+with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ grepl( "medtronic_3389", stim_pars.electrode ) ] ) %>% sort() # Medtronic 3389, N = 5
+with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ grepl( "medtronic_B33005", stim_pars.electrode ) ] ) %>% sort() # Medtronic B33005, N = 1
+with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ stim_pars.electrode == "medtronic" ] ) %>% sort() # most likely Medtronic B33005, N = 1
