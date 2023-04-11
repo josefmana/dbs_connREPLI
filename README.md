@@ -1,2 +1,2 @@
 # dbs_connREPLI
-If I am the leading author, this one will supersede dbs_mriCONN_predict and the project will become a pure replication trial.
+This one will supersede dbs_mriCONN_predict for the replication trial of previous findings regarding fMRI connectivity patterns predicting motor, cognitive and affective outcomes after STN DBS in PD.
