@@ -129,44 +129,21 @@ d.out <- d.out %>% mutate(
   
   )
 
-# print all new patients that are already done
-d.out[ d.out$id %in% with( d.sum, id[ stim_orig == 0 & stim_new != 0]) , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>%
-  # change to a wide format
-  pivot_wider( id_cols = "id", names_from = "ass", values_from = c("psych.drs","psych.bdi","motor.mds_updrs_iii") )
+# keep only variables of interest
+d0 <- d.out[ , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>% `rownames<-`( 1:nrow(.) )
 
-# next print all new patients that I failed to pre-process so far
-d.out[ d.out$id %in% with( d.sum, id[ stim_orig == 0 & stim_new == 0]) , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>%
-  # change to a wide format
-  pivot_wider( id_cols = "id", names_from = "ass", values_from = c("psych.drs","psych.bdi","motor.mds_updrs_iii") )
+# collapse patient's IPN187 pre assessment into a single row
+d0 <- d0[-37, ] # delete the first IPN187 pre row
+d0[ with(d0, id == "IPN187" & ass == "pre") , c("psych.drs","psych.bdi","motor.mds_updrs_iii") ] <- c(133,12,43)
+
+# save the outcome data frame as .csv for further analyses
+write.table( arrange(d0, d0$id), file = "data/preds/dbs_connREPLI_observed_outcomes.csv", row.names = F, sep = ",", quote = F )
 
 
-# ---- repeated pre-processing of patients with better CT ----
+# ---- session info ----
 
-# some patients had bad quality, CT, got better images and repeating the pre-processing
+# prepare a folder for session's info if it does not exist yet
+if( !dir.exists("sess") ) dir.create("sess")
 
-# print IDs of patients to be repaired
-r.id <- c( d.sum[ d.sum$loc_quality %in% c("thrash","bad"), "id" ], "IPN347" ) %>% sort() %>% as.data.frame() %>% filter( !grepl("244|256|279" , .) )
-
-# deface the patients to be repaired
-writeLines( paste0( "spm_deface( {\n",
-                    paste( paste0("'", getwd(), "/data/mri/", paste0( r.id$., "/anat_t1.nii" ),"'"),
-                           collapse = "\n"),
-                    "\n} )"
-                    ), con = "conduct_spmdeface_repair.m" )
-
-# go to MatLab and run the code there
-
-# remove original (faced) T1s and rename the new (defaced) T1s appropriately
-for ( i in r.id$. ) {
-  # do not run if the data were already processed via Lead-DBS (i.e., the original file was renamed to "raw_anat_t1.nii")
-  if ( !file.exists( paste0("data/mri/", i, "/raw_anat_t1.nii" ) ) ) {
-    file.remove( paste0("data/mri/", i, "/anat_t1.nii" ) ) # remove the original
-    file.rename( from = paste0("data/mri/",i,"/anon_anat_t1.nii"), to = paste0("data/mri/",i,"/anat_t1.nii") ) # rename the defaced file
-  }
-}
-
-# print patients according to the electrodes for Lead pre-reconstruction
-with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ grepl( "st.jude|cardion", stim_pars.electrode ) ] ) %>% sort() # St. Jude, N = 8
-with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ grepl( "medtronic_3389", stim_pars.electrode ) ] ) %>% sort() # Medtronic 3389, N = 5
-with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ grepl( "medtronic_B33005", stim_pars.electrode ) ] ) %>% sort() # Medtronic B33005, N = 1
-with( d.out[ d.out$id %in% c( r.id$., "IPN243" ), ], id[ stim_pars.electrode == "medtronic" ] ) %>% sort() # most likely Medtronic B33005, N = 1
+# write the sessionInfo() into a .txt file
+capture.output( sessionInfo(), file = "sess/data_prep.txt" )
