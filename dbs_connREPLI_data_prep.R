@@ -29,6 +29,43 @@ d.out <- read.csv( "data/dbs_connREPLI_outcome_data.csv", sep = ";" ) # outcome 
 d.def <- read.csv( "data/dbs_connREPLI_pats2deface.csv", header = F )$V1 # patients to deface
 
 
+# ---- outcome data pre-processing ----
+
+# keep only pre- and r1- assessments which are to be included
+d.out <- d.out[ d.out$ass %in% c("pre","r1") , ]
+
+# exclude patients with no pre- or post-test
+d.out <- d.out[ !( d.out$id %in% ( which( table(d.out$id) < 2 ) %>% names() ) ) , ]
+
+# prepare sums scores for each outcome
+# starting with neuropsychology
+for ( i in c("drs","bdi") ) d.out[[paste0("psych.",i)]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
+
+# continue with motor scores
+d.out <- d.out %>% mutate(
+  # create a new variable with MDS-UPDRS III (after transformation from the old UPDRS III un some cases)
+  motor.mds_updrs_iii =
+    case_when( ass == "pre" ~ motor.med_off, ass == "r1" ~ motor.stim_on ) + # raw score
+    case_when( motor.ldopa_test == "updrs_iii" ~ 7, motor.ldopa_test == "mds_updrs_iii" | is.na(motor.ldopa_test) ~ 0 ) # add seven for patients with the old UPDRS III
+)
+
+# keep only variables of interest
+d0 <- d.out[ , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>% `rownames<-`( 1:nrow(.) )
+
+# collapse patient's IPN187 pre assessment into a single row
+d0 <- d0[-37, ] # delete the first IPN187 pre row
+d0[ with(d0, id == "IPN187" & ass == "pre") , c("psych.drs","psych.bdi","motor.mds_updrs_iii") ] <- c(133,12,43)
+
+# save the outcome data frame as .csv for further analyses
+write.table( arrange(d0, d0$id), file = "data/preds/dbs_connREPLI_observed_outcomes.csv", row.names = F, sep = ",", quote = F )
+
+
+# ---- extract patients who will be included ----
+
+# remove MRIs of excluded patients
+for( i in list.files( d.dir, recursive = F )[ !( list.files( d.dir, recursive = F ) %in% unique(d.out$id) ) ] ) unlink( paste0( d.dir, "/", i ), recursive = T )
+
+
 # ---- defacing via spm_deface ----
 
 # write a MatLab script for spm_deface
@@ -51,18 +88,6 @@ for ( i in d.def ) {
     
   }
 }
-
-
-# ---- extract patients who will be included ----
-
-# keep only pre- and r1- assessments which are to be included
-d.out <- d.out[ d.out$ass %in% c("pre","r1") , ]
-
-# exclude patients with no pre- or post-test
-d.out <- d.out[ !( d.out$id %in% ( which( table(d.out$id) < 2 ) %>% names() ) ) , ]
-
-# remove MRIs of excluded patients
-for( i in list.files( d.dir, recursive = F )[ !( list.files( d.dir, recursive = F ) %in% unique(d.out$id) ) ] ) unlink( paste0( d.dir, "/", i ), recursive = T )
 
 
 # ---- coregistration via LeadDBS ----
@@ -101,7 +126,7 @@ with( d.out, id[ grepl( "medtronic_B33005", stim_pars.electrode ) ] ) %>% sort()
 d.loc <- read.csv( "data/dbs_connREPLI_localization_sum.csv", sep = "," )
 
 
-# ---- VATs calculation via LeadDBS, round #1 ----
+# ---- VATs calculation via LeadDBS ----
 
 # first, trim down to only patients with nice looking data
 d.loc[ d.loc$loc_quality %in% c("bad","thrash"), "id" ] # do not calculate VATs for thrash localizations if there are any
@@ -111,39 +136,68 @@ d.out[ d.out$ass == "r1" & is.na(d.out$stim_pars.right_neg_cont) , "id" ] # pati
 d.stim <- read.csv( "data/dbs_connREPLI_stimulation_sum.csv", sep = "," )
 
 
-# ---- preliminary pre-processing summary ----
+# ---- MRI pre-processing summary ----
 
 # put summary of all pre-processing steps into a single object
 d.sum <- left_join( d.cor, d.nor, by = "id" ) %>% left_join( d.loc, by = "id" ) %>% left_join( d.stim, by = "id" )
 
-# prepare sums scores for each outcome
-# starting with neuropsychology
-for ( i in c("drs","bdi") ) d.out[[paste0("psych.",i)]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
+# save as .csv
+write.table( d.sum, file = "data/dbs_connREPLI_preprocessing_summary.csv", sep = ",", row.names = F, quote = F )
 
-# continue with motor scores
-d.out <- d.out %>% mutate(
-  # create a new variable with MDS-UPDRS III (after transformation from the old UPDRS III un some cases)
-  motor.mds_updrs_iii =
-    case_when( ass == "pre" ~ motor.med_off, ass == "r1" ~ motor.stim_on ) + # raw score
-    case_when( motor.ldopa_test == "updrs_iii" ~ 7, motor.ldopa_test == "mds_updrs_iii" | is.na(motor.ldopa_test) ~ 0 ) # add seven for patients with the old UPDRS III
+
+# ---- VATs extraction ----
+
+# list all patients in the MRI data folder
+id.mri <- list.files( d.dir, recursive = F ) %>% as.data.frame() %>% filter( grepl("IPN", . ) ) %>% t() %>% as.character()
+id.out <- unique( d0$id ) %>% sort()
+
+# check whether the IDs are identical in the outcome file as in the MRI data folder
+isTRUE( all.equal( id.mri, id.out ) ) # a-ok
+
+# list paths to VATs for each patient
+VAT.path <- lapply( id.mri, function(i)
   
-  )
+  # first list all paths to all files for each patient
+  list.files( paste0( d.dir, "/", i ) , recursive = T ) %>% as.data.frame() %>%
+    # keep only paths to VATs in MNI space, niix format, drop the files with gaussian efield
+    filter( grepl("MNI", . ) & grepl( "vat", . ) & grepl( "nii", . ) & !grepl( "gauss", . ) ) %>%
+    t() %>% as.character() # do some housekeeping
+  
+) %>% `names<-`( id.mri )
 
-# keep only variables of interest
-d0 <- d.out[ , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>% `rownames<-`( 1:nrow(.) )
+# list summary of all VATs present
+VAT.sum <- data.frame( id = id.mri ) %>%
+  # add a dummy variable indicating whether there's VAT for each patient (right/left separately)
+  mutate( vat.right = sapply(id, function(i) any( grepl( "right", VAT.path[[i]] ) ) ) %>% as.numeric(),
+          vat.left = sapply(id, function(i) any( grepl( "left", VAT.path[[i]] ) ) ) %>% as.numeric() )
 
-# collapse patient's IPN187 pre assessment into a single row
-d0 <- d0[-37, ] # delete the first IPN187 pre row
-d0[ with(d0, id == "IPN187" & ass == "pre") , c("psych.drs","psych.bdi","motor.mds_updrs_iii") ] <- c(133,12,43)
+# extract all VATs and put them in their own folders
+# first prepare a folder for all the VATs
+if( !dir.exists("data/vat") ) dir.create( "data/vat" )
 
-# save the outcome data frame as .csv for further analyses
-write.table( arrange(d0, d0$id), file = "data/preds/dbs_connREPLI_observed_outcomes.csv", row.names = F, sep = ",", quote = F )
+# next add VATs of each patient
+for ( i in names(VAT.path) ) {
+  
+  # prepare patient folder
+  if( !dir.exists( paste0( "data/vat/", i ) ) ) dir.create( paste0( "data/vat/", i ) )
+  
+  # check whether there's any VAT for the patient i
+  if ( length( VAT.path[[i]] != 0 ) ) {
+    
+    # loop through all files of each patient
+    for ( j in 1:length( VAT.path[[i]] ) ) {
+      
+      # copy VAT from the mri to vat folder
+      file.copy( from = paste( d.dir, i, VAT.path[[i]][j], sep = "/" ),
+                 to = paste( d.dir, i, sub( ".*/", "", VAT.path[[i]][j] ), sep = "/" )
+                 )
+      
+    }
+  }
+}
 
 
 # ---- session info ----
 
-# prepare a folder for session's info if it does not exist yet
-if( !dir.exists("sess") ) dir.create("sess")
-
-# write the sessionInfo() into a .txt file
-capture.output( sessionInfo(), file = "sess/data_prep.txt" )
+if( !dir.exists("sess") ) dir.create("sess") # prepare a folder for session's info if it does not exist yet
+capture.output( sessionInfo(), file = "sess/data_prep.txt" ) # write the sessionInfo() into a .txt file
