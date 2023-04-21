@@ -39,22 +39,22 @@ d.out <- d.out[ !( d.out$id %in% ( which( table(d.out$id) < 2 ) %>% names() ) ) 
 
 # prepare sums scores for each outcome
 # starting with neuropsychology
-for ( i in c("drs","bdi") ) d.out[[paste0("psych.",i)]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
+for ( i in c("drs","bdi") ) d.out[[i]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
 
 # continue with motor scores
 d.out <- d.out %>% mutate(
   # create a new variable with MDS-UPDRS III (after transformation from the old UPDRS III un some cases)
-  motor.mds_updrs_iii =
+  mds_updrs_iii =
     case_when( ass == "pre" ~ motor.med_off, ass == "r1" ~ motor.stim_on ) + # raw score
     case_when( motor.ldopa_test == "updrs_iii" ~ 7, motor.ldopa_test == "mds_updrs_iii" | is.na(motor.ldopa_test) ~ 0 ) # add seven for patients with the old UPDRS III
 )
 
 # keep only variables of interest
-d0 <- d.out[ , c("id","ass","psych.drs","psych.bdi","motor.mds_updrs_iii") ] %>% `rownames<-`( 1:nrow(.) )
+d0 <- d.out[ , c("id","ass","drs","bdi","mds_updrs_iii") ] %>% `rownames<-`( 1:nrow(.) )
 
 # collapse patient's IPN187 pre assessment into a single row
 d0 <- d0[-37, ] # delete the first IPN187 pre row
-d0[ with(d0, id == "IPN187" & ass == "pre") , c("psych.drs","psych.bdi","motor.mds_updrs_iii") ] <- c(133,12,43)
+d0[ with(d0, id == "IPN187" & ass == "pre") , c("drs","bdi","mds_updrs_iii") ] <- c(133,12,43)
 
 # save the outcome data frame as .csv for further analyses
 write.table( arrange(d0, d0$id), file = "data/preds/dbs_connREPLI_observed_outcomes.csv", row.names = F, sep = ",", quote = F )
