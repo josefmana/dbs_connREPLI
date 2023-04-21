@@ -8,7 +8,7 @@
 # list packages to use
 pkgs <- c( "rstudioapi", # setting working directory via RStudio API
            "tidyverse", "dplyr", # data wrangling
-           "ggplot2", "GGally", # plotting
+           "ggplot2", "GGally", #"gridExtra", # plotting
            "rcompanion" # calculate Spearman Rho
            )
 
@@ -79,6 +79,14 @@ d0 <- d0 %>% left_join(
 #    )
 #  }
 #}
+
+# print the table to jpeg
+#tableGrob(
+#  t1 %>% mutate( outcome = c("DRS-2","BDI-II","MDS-UPDRS III") ) %>% `colnames<-`( c("Outcome","N","Gain","Percentage") ),
+#  rows = NULL, theme = ttheme_minimal( padding = unit(c(8,8), "mm") )
+#) %>%
+#  grid.arrange() %>%
+#  ggsave( "tabs/t1_spearman_rho_with_bootstrapped_95_percent_ci.jpg" , width = 13.7/2, height = 7.57/2, plot = . )
 
 
 # ---- Spearman's Rho correlation matrix ----
