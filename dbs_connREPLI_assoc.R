@@ -97,7 +97,8 @@ theme_set( theme_bw( base_size = 18) )
 # plot it
 ggpairs(
   # list the variables
-  d0[ , c( paste0( c("drs","bdi","mds_updrs_iii"), "_gain"), paste0( "R_", c("drs","bdi","mds_updrs_iii") ) ) ],
+  d0[ , c("drs_gain", "R_drs", "bdi_gain", "R_bdi", "mds_updrs_iii_gain", "R_mds_updrs_iii") ],
+  #d0[ , c( paste0( c("drs","bdi","mds_updrs_iii"), "_gain"), paste0( "R_", c("drs","bdi","mds_updrs_iii") ) ) ],
   # Spearman's Rho above the diagonal, histograms on the diagonal, scatterdot plots below the diagonal
   upper = list( continuous = wrap( "cor", method = "spearman" ) ),
   diag = list( continuous = wrap( "barDiag", bins = 10 ) ),
