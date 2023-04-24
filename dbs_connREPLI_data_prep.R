@@ -50,11 +50,11 @@ d.out <- d.out %>% mutate(
 )
 
 # keep only variables of interest
-d0 <- d.out[ , c("id","ass","drs","bdi","mds_updrs_iii") ] %>% `rownames<-`( 1:nrow(.) )
+d0 <- d.out[ , c("id","ass","drs","bdi","mds_updrs_iii","ledd") ] %>% mutate( ledd = as.numeric( sub(",",".",ledd) ) ) %>% `rownames<-`( 1:nrow(.) )
 
 # collapse patient's IPN187 pre assessment into a single row
 d0 <- d0[-37, ] # delete the first IPN187 pre row
-d0[ with(d0, id == "IPN187" & ass == "pre") , c("drs","bdi","mds_updrs_iii") ] <- c(133,12,43)
+d0[ with(d0, id == "IPN187" & ass == "pre") , c("drs","bdi","mds_updrs_iii","ledd") ] <- c(133,12,43,1596.25)
 
 # save the outcome data frame as .csv for further analyses
 write.table( arrange(d0, d0$id), file = "data/preds/dbs_connREPLI_observed_outcomes.csv", row.names = F, sep = ",", quote = F )
