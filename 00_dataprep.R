@@ -2,8 +2,8 @@
 # fMRI connectivity patterns of stimulated parts of STN in STN DBS in PD for motor, cognitive and affective outcomes.
 
 # The goals of this script are:
-# (i) deface MRIs of patients that were not defaced previously,
-# (ii) document quality checks and pre-processing steps in Lead-DBS leading to extraction of volumes of activated tissue (VATs),
+# (i) prepare the outcomes file
+# (ii) deface MRIs of patients that were not defaced previously,
 # (iii) shuffle the files so that they end up in the right places.
 
 # list packages to be used
@@ -22,11 +22,14 @@ for ( i in pkgs ) {
 setwd( dirname(getSourceEditorContext()$path) )
 
 # write down some important parameters
-d.dir <- "data/mri" # Where the MRI data is?
+d.dir <- "_nogithub/data/mri" # Where the MRI data is?
 
 # read patients identificators
-d.out <- read.csv( "data/dbs_connREPLI_outcome_data.csv", sep = ";" ) # outcome data
-d.def <- read.csv( "data/dbs_connREPLI_pats2deface.csv", header = F )$V1 # patients to deface
+d.out <- read.csv( "_nogithub/raw/dbs_connREPLI_outcome_data.csv", sep = ";" ) # outcome data
+d.def <- read.csv( "_nogithub/raw/dbs_connREPLI_pats2deface.csv", header = F )$V1 # patients to deface
+
+# prepare a folder for tables, figures, models, and sessions info
+sapply( c("tabs","figs","mods","sess","_nogithub","_nogithub/data"), function(i) if( !dir.exists(i) ) dir.create(i) )
 
 
 # ---- outcome data pre-processing ----
@@ -38,8 +41,12 @@ d.out <- d.out[ d.out$ass %in% c("pre","r1") , ]
 d.out <- d.out[ !( d.out$id %in% ( which( table(d.out$id) < 2 ) %>% names() ) ) , ]
 
 # prepare sums scores for each outcome
+# first re-score STAIX reverse items
+for ( i in c(1,2,5,8,10,11,15,16,19,20) ) d.out[ , paste0("psych.staix1_",i) ] <- 5 - d.out[ , paste0("psych.staix1_",i) ]
+for ( i in c(1,6,7,10,13,16,19) ) d.out[ , paste0("psych.staix2_",i) ] <- 5 - d.out[ , paste0("psych.staix2_",i) ]
+
 # starting with neuropsychology
-for ( i in c("drs","bdi") ) d.out[[i]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
+for ( i in c("drs","bdi","staix1","staix2") ) d.out[[i]] <- d.out[ , grepl( paste0("psych.",i), names(d.out) ) ] %>% rowSums()
 
 # continue with motor scores
 d.out <- d.out %>% mutate(
@@ -50,28 +57,21 @@ d.out <- d.out %>% mutate(
 )
 
 # keep only variables of interest
-d0 <- d.out[ , c("id","ass","drs","bdi","mds_updrs_iii","ledd") ] %>% mutate( ledd = as.numeric( sub(",",".",ledd) ) ) %>% `rownames<-`( 1:nrow(.) )
+d0 <- d.out[ , c("id","ass","drs","bdi","staix1","staix2","mds_updrs_iii","ledd") ] %>% mutate( ledd = as.numeric( sub(",",".",ledd) ) ) %>% `rownames<-`( 1:nrow(.) )
 
 # collapse patient's IPN187 pre assessment into a single row
 d0 <- d0[-37, ] # delete the first IPN187 pre row
-d0[ with(d0, id == "IPN187" & ass == "pre") , c("drs","bdi","mds_updrs_iii","ledd") ] <- c(133,12,43,1596.25)
+d0[ with(d0, id == "IPN187" & ass == "pre") , c("drs","bdi","staix1","staix2","mds_updrs_iii","ledd") ] <- c(133,12,34,32,43,1596.25)
 
 # save the outcome data frame as .csv for further analyses
-write.table( arrange(d0, d0$id), file = "data/preds/dbs_connREPLI_observed_outcomes.csv", row.names = F, sep = ",", quote = F )
-
-
-# ---- extract patients who will be included ----
-
-# remove MRIs of excluded patients
-for( i in list.files( d.dir, recursive = F )[ !( list.files( d.dir, recursive = F ) %in% unique(d.out$id) ) ] ) unlink( paste0( d.dir, "/", i ), recursive = T )
+write.table( arrange(d0, d0$id), file = "_nogithub/data/observations.csv", sep = ",", row.names = F, quote = F )
 
 
 # ---- defacing via spm_deface ----
 
 # write a MatLab script for spm_deface
 writeLines( paste0( "spm_deface( {\n",
-                    paste( paste0("'", getwd(), "/data/mri/", paste0( d.def, "/anat_t1.nii" ),"'"),
-                           collapse = "\n"),
+                    paste( paste0("'", getwd(), d.dir, "/", paste0( d.def, "/anat_t1.nii" ),"'"), collapse = "\n"),
                     "\n} )"
                     ), con = "processing/conduct_spmdeface.m" )
 
@@ -88,61 +88,6 @@ for ( i in d.def ) {
     
   }
 }
-
-
-# ---- coregistration via LeadDBS ----
-
-# run "processing/dbs_connREPLI_leaddbs_coregistration.m"
-# because I accidentally overwrote the defaced patients, had to run "processing/dbs_connREPLI_leaddbs_coregistration_repair.m" as well
-
-# read-out the summary of coregistration
-d.cor <- read.csv( "data/dbs_connREPLI_coregistration_sum.csv", sep = "," )
-
-# try different algorithms for patients with unsuccessful coregistration and list the results
-d.cor <- d.cor %>% mutate( t2_action = case_when( id %in% c("IPN195","IPN263") ~ "fsl_flirt", id == "IPN214" ~ "spm&ants" ),
-                           ct_action = case_when( id == "IPN211" ~ "fsl_flirt" )
-                           )
-
-
-# ---- normalization via LeadDBS ----
-
-# run "processing/dbs_connREPLI_leaddbs_normalization.m"
-# because I accidentally overwrote the defaced patients, had to run "processing/dbs_connREPLI_leaddbs_normalization_repair.m" as well
-
-# read-out the summary of normalization
-d.nor <- read.csv( "data/dbs_connREPLI_normalization_sum.csv", sep = "," )
-
-
-# ---- electrode localization via LeadDBS ----
-
-# print patients according to the electrodes for Lead pre-reconstruction
-with( d.out, id[ grepl( "st.jude|cardion", stim_pars.electrode ) ] ) %>% sort() # St. Jude, N = 35
-with( d.out, id[ grepl( "medtronic_3389", stim_pars.electrode ) ] ) %>% sort() # Medtronic 3389, N = 26
-with( d.out, id[ grepl( "medtronic_B33005", stim_pars.electrode ) ] ) %>% sort() # Medtronic B33005, N = 1
-
-# this one is done manually via LeadDBS in MatLab
-
-# read-out the summary of localization
-d.loc <- read.csv( "data/dbs_connREPLI_localization_sum.csv", sep = "," )
-
-
-# ---- VATs calculation via LeadDBS ----
-
-# first, trim down to only patients with nice looking data
-d.loc[ d.loc$loc_quality %in% c("bad","thrash"), "id" ] # do not calculate VATs for thrash localizations if there are any
-d.out[ d.out$ass == "r1" & is.na(d.out$stim_pars.right_neg_cont) , "id" ] # patients with missing stimulation parameters
-
-# read-out the summary of VAT calculation
-d.stim <- read.csv( "data/dbs_connREPLI_stimulation_sum.csv", sep = "," )
-
-
-# ---- MRI pre-processing summary ----
-
-# put summary of all pre-processing steps into a single object
-d.sum <- left_join( d.cor, d.nor, by = "id" ) %>% left_join( d.loc, by = "id" ) %>% left_join( d.stim, by = "id" )
-
-# save as .csv
-write.table( d.sum, file = "data/dbs_connREPLI_preprocessing_summary.csv", sep = ",", row.names = F, quote = F )
 
 
 # ---- VATs extraction ----
@@ -199,5 +144,5 @@ for ( i in names(VAT.path) ) {
 
 # ---- session info ----
 
-if( !dir.exists("sess") ) dir.create("sess") # prepare a folder for session's info if it does not exist yet
-capture.output( sessionInfo(), file = "sess/data_prep.txt" ) # write the sessionInfo() into a .txt file
+# write the sessionInfo() into a .txt file
+capture.output( sessionInfo(), file = "sess/data_prep.txt" )
