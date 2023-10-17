@@ -24,9 +24,11 @@ setwd( dirname(getSourceEditorContext()$path) )
 # write down some important parameters
 d.dir <- "_nogithub/data/mri" # Where the MRI data is?
 
-# read patients identificators
+# read data and patients identificators
 d.out <- read.csv( "_nogithub/raw/dbs_connREPLI_outcome_data.csv", sep = ";" ) # outcome data
 d.def <- read.csv( "_nogithub/raw/dbs_connREPLI_pats2deface.csv", header = F )$V1 # patients to deface
+d.its <- read.csv( "_nogithub/raw/ITEMPO_DATA_2023-10-17_1255.csv", sep = "," ) # item-level UPDRS-III
+n.its <- read.csv( "_nogithub/raw/mds_updrs_iii_redcap_names.csv", sep = "," ) # MDS-UPDRS-III RedCap names
 
 # prepare a folder for tables, figures, models, and sessions info
 sapply( c("tabs","figs","mods","sess","_nogithub","_nogithub/data"), function(i) if( !dir.exists(i) ) dir.create(i) )
@@ -65,6 +67,45 @@ d0[ with(d0, id == "IPN187" & ass == "pre") , c("drs","bdi","staix1","staix2","m
 
 # save the outcome data frame as .csv for further analyses
 write.table( arrange(d0, d0$id), file = "_nogithub/data/observations.csv", sep = ",", row.names = F, quote = F )
+
+
+# ---- item-level MDS-UPDRS III data ----
+
+# re-code redcap_event name
+d.its <- d.its %>%
+  rename( "id" = "study_id" ) %>%
+  mutate( event = case_when( redcap_event_name == "screening_arm_1" ~ "pre", redcap_event_name == "nvtva_r1_arm_1" ~ "post" ) )
+
+# extract separate data sets for each pre/post:med_on/med_off:stim_NA/stim_on/stim_off combination (four in our data set)
+d1 <- lapply( setNames( names(n.its), names(n.its) ),
+              function(i) # loop through conditions/combinations from above
+                
+                # and select only data from included patients and measures from selected combination
+                d.its[ with( d.its, id %in% unique(d0$id) & event == strsplit(i,"_")[[1]][1] ) , c( "id", t(n.its[,i]) ) ] %>%
+                # rename the columns such that they are identical across combinations
+                `colnames<-`(
+                  c(# patient id first
+                    colnames(.)[1],
+                    # way too sophisticated re-coding for items (because they differ across conditions in RedCap quite enough to make it messy)
+                    sub( "_ldopateston", "", sub( "_ldopatest", "", sub( "mdsupdrs_3", "item", sub( "_[^_]*$", "" , colnames(.)[2:ncol(.)] ) ) ) )
+                  )
+                ) %>%
+                
+                # add variables for event (pre vs post), medication (on vs off) and stimulation (on vs off vs no)
+                mutate( event = strsplit(i,"_")[[1]][1],
+                        medic = strsplit(i,"_")[[1]][2],
+                        stim = strsplit(i,"_")[[1]][3],
+                        .after = id
+                        )
+              ) %>%
+  
+  # collapse all the data to a single sexy data file
+  do.call( rbind.data.frame, . ) %>%
+  arrange( by = id ) # sort by IDs
+
+# save it
+write.table( d1, "_nogithub/data/mds_updrs_iii_item_level_observations.csv", sep = ",", row.names = F, quote = F, na = "NA" )
+write.table( d1[ d1$event == "pre", ], "_nogithub/data/mds_updrs_iii_item_level_preop.csv", sep = ",", row.names = F, quote = F, na = "NA" ) # pre-surgery only for sharing with colleagues from NetStim
 
 
 # ---- defacing via spm_deface ----
