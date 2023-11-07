@@ -26,14 +26,17 @@ sapply( c("mods", "figs", "tabs", "sess"), function(i) if( !dir.exists(i) ) dir.
 
 # read the data
 d.outs <- read.table( "_nogithub/data/observations.csv", sep = ",", header = T )
-d.prds <- read_excel( "_nogithub/raw/preds/Prague_predictions.xls", sheet = "Sheet1" ) %>% rename( "id" = "Patient" )
+#d.prds <- read_excel( "_nogithub/raw/preds/Prague_predictions.xls", sheet = "Sheet1" ) %>% rename( "id" = "Patient" )
+d.prds <- read.csv( "_nogithub/raw/preds/IPN Patients predictions - Sheet1.csv", na.strings = "NaN", skip = 1 ) %>%
+  mutate( id = sub( "sub-", "", Patients ) %>% sub("'", "", . ) )
 
 # list the outcomes
-outs <- c( "drs", "bdi", "staix1", "staix2", "mds_updrs_iii", "ledd" )
+#outs <- c( "drs", "bdi", "staix1", "staix2", "mds_updrs_iii", "ledd" )
+outs <- c( "mds_updrs_iii", "ledd" )
 
 # extract predictions
-prds <- names(d.prds)[ !grepl( "Carer", names(d.prds) ) & grepl( "Total_abs", names(d.prds ) ) ]
-
+#prds <- names(d.prds)[ !grepl( "Carer", names(d.prds) ) & grepl( "Total_abs", names(d.prds ) ) ]
+prds <- names(d.prds)[ c(2:6,12)]
 
 # ---- data wrangling ----
 

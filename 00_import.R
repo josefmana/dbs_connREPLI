@@ -57,7 +57,10 @@ d3 <-
         )
 
 
-# RESPONSE DATA PRE-PROCESSING ----
+# RESPONSE DATA EXTRACTION ----
+
+# list variables of interest
+v <- c( "mds_updrs_iii", psy$scale )
 
 # keep only pre- and r1- assessments which are to be included
 d0 <-
@@ -69,8 +72,6 @@ d0 <-
 # exclude patients with no pre- or post-test
 d0 <- d0[ !( d0$id %in% ( which( table(d0$id) < 2 ) %>% names() ) ) , ]
 
-# ---- extract response data ----
-
 # extract FAQ item scores
 for( i in unlist( strsplit( with( psy, item[scale=="faq"] ), "," ) ) ) {
   d0[ , paste0("faq_",i) ] <-
@@ -80,7 +81,7 @@ for( i in unlist( strsplit( with( psy, item[scale=="faq"] ), "," ) ) ) {
     )
 }
 
-# remove all FAQ scores apart from items
+# remove all FAQ scores apart from item responses
 d0 <- d0[ , -which( grepl( "faq_fill|faq_uvod|faq_vykon|faq_nikdy|faq_score", names(d0) ) ) ]
 
 # remove DRS-2 total score from the data set (we want single subscores only)
@@ -91,7 +92,7 @@ names(d0)[ grepl("bdi",names(d0)) ] <- names(d0)[ grepl("bdi",names(d0)) ] %>% s
 
 # extract item-level data for all response variables of interest
 d1 <-
-  lapply( with( psy, setNames( c("mds_updrs_iii",scale), c("mds_updrs_iii",scale) ) ),
+  lapply( setNames(v,v),
           function(i) {
             
             # MDS UPDRS-III needs special treatment because it was measured in medication/stimulation on/off states
@@ -104,11 +105,13 @@ d1 <-
                           
                           # and select only data from included patients and measures from selected combination
                           d0[ with( d0, event == strsplit(j,"_")[[1]][1] ) , c( "id", t(its[,j]) ) ] %>%
+                          
                           # rename the columns such that they are identical across combinations
                           `colnames<-`(
                             c(# patient id first
                               colnames(.)[1],
-                              # way too sophisticated re-coding for items (because they differ across conditions in RedCap quite enough to make it messy)
+                              # way too sophisticated re-coding for items
+                              # (because they differ across conditions in RedCap quite enough to make it messy)
                               sub( "_[^_]*$", "" , colnames(.)[2:ncol(.)] ) %>%
                                 sub( "mdsupdrs_3", "item", . ) %>%
                                 sub( "_ldopatest", "", . ) %>%
@@ -121,8 +124,8 @@ d1 <-
                                   medic = strsplit(j,"_")[[1]][2],
                                   stim = strsplit(j,"_")[[1]][3],
                                   .after = id
-                          )
-                ) %>%
+                                  )
+                        ) %>%
                 
                 # collapse all the data to a single sexy data file
                 do.call( rbind.data.frame, . ) %>%
@@ -147,6 +150,7 @@ d1 <-
                               names_to = "item",
                               names_transform = function(x) sub( paste0(i,"_"), "", x )
                               ) %>%
+
                 select( id, event, item, score )
               
               # extract data array
@@ -160,4 +164,33 @@ d1 <-
 
 # save the resulting array as .rds file
 saveRDS( object = d1, file = "_data/response_data.rds" )
+
+
+# RESPONSE DATA TRANSFORMATION ----
+
+# in this chunk of code we pre-process (i.e., sum items for the most part) response data
+# start by reversing item scores where applicable (psychological variables only, no reverse items in MDS UPDRS-III)
+with(
+  psy,
+  for ( i in scale[complete.cases(rev)] ) for ( j in unlist( strsplit(rev[scale==i],",") ) ) {
+    # reverse item scores by subtracting raw score from scale's (min + max)
+    d1[[i]][j, , ] <<- # double arrow to ensure the results will go beyond with()
+      ( max[scale==i] + min[scale==i] ) - d1[[i]][j, , ]
+  }
+)
+
+# prepare an array for MDS UPDRS-III subscales and
+# keep only medication OFF with stimulation ON (or NONE in case of pre-test) conditions for MDS UPDRS-III
+# as these are the only ones used in previous studies we are trying to replicate and will use only them
+for ( i in rev(mot$scale) ){ # using rev() in order for MDS UPDRS-III full score being the last processes
+  # both "none" and "on" conditions for "stim" need to be kept for now
+  d1[[i]] <-
+    d1$mds_updrs_iii[ with( mot, unlist( strsplit( item[scale==i], "," ) ) ), , , , ]
+}
+
+# update variables of interest to include all MDS UPDR-III subscales
+v <- names(d1)
+
+# prepare a dataframe with sum scores of each variable of interest
+
 

@@ -16,7 +16,7 @@ format:
 #| label: set-up
 #| output: false
 
-pkgs <- c( "here", "readxl", "tidyverse", "corrplot" )
+pkgs <- c( "here", "tidyverse", "corrplot" )
 
 # load or install packages as needed
 for ( i in pkgs ) {
