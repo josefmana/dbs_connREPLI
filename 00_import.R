@@ -6,7 +6,7 @@
 # outcome by NetStim group.
 
 # list packages to be used
-pkgs <- c("rstudioapi","tidyverse")
+pkgs <- c("rstudioapi","tidyverse","purrr")
 
 # load or install each of the packages as needed
 for ( i in pkgs ) {
@@ -179,18 +179,96 @@ with(
   }
 )
 
-# prepare an array for MDS UPDRS-III subscales and
-# keep only medication OFF with stimulation ON (or NONE in case of pre-test) conditions for MDS UPDRS-III
-# as these are the only ones used in previous studies we are trying to replicate and will use only them
-for ( i in rev(mot$scale) ){ # using rev() in order for MDS UPDRS-III full score being the last processes
-  # both "none" and "on" conditions for "stim" need to be kept for now
-  d1[[i]] <-
-    d1$mds_updrs_iii[ with( mot, unlist( strsplit( item[scale==i], "," ) ) ), , , , ]
+# prepare an array for MDS UPDRS-III subscales
+for ( i in mot$scale[-1] ) d1[[i]] <- d1$mds_updrs_iii[ with( mot, unlist( strsplit( item[scale==i], "," ) ) ), , , , ]
+
+
+# ---- prepare a wide dataframe with outcomes ----
+
+# prepare a dataframe with sum scores of each psychological variable of interest
+df <- lapply( with( psy, setNames(scale,scale) ), function(i) sapply( c("pre","r1"), function(j) colSums( d1[[i]][ ,j, ] ) ) )
+
+# add to df MDS UPDRS-III (sub)scales
+for ( i in mot$scale ) {
+  df[[i]] <-
+    lapply(
+      # loop through stimulation conditions
+      with( dimnames(d1[[i]]), setNames(stim,stim) ),
+      function(j)
+        # loop through conditions conditions
+        lapply(
+          with( dimnames(d1[[i]]), setNames(medic,medic) ),
+          function(k)
+            # loop through events last in order for them to be on the tail of final variable names
+            sapply( dimnames(d1[[i]])$event, function(l) colSums( d1[[i]][ ,j,k,l, ] )  )
+        )
+    ) %>%
+    
+    # pull all the conditions together
+    do.call( cbind.data.frame, . )
+
 }
 
-# update variables of interest to include all MDS UPDR-III subscales
-v <- names(d1)
+# pull all the variable data frames into a single (wide) table
+df <- do.call( cbind.data.frame, df ) %>%
+  
+  # in column names use underscores "_" instead of dots "."
+  `colnames<-`( gsub( ".", "_", colnames(.), fixed = T ) ) %>%
+  
+  # add LEDD for both pre and r1 assessments
+  mutate(
+    ledd_pre = sapply( rownames(.), function(i) with( d0, levodopa_equivalent[ id == i & event == "pre" ] ), USE.NAMES = F ),
+    ledd_r1 = sapply( rownames(.), function(i) with( d0, levodopa_equivalent[ id == i & event == "r1" ] ), USE.NAMES = F )
+  ) %>%
+  
+  # drop columns of conditions that were not measured (such as preop on stimulation conditions)
+  # NOTE THAT THESE COLUMNS CAN BE IDENTIFIED VIA COMPUTING COLUMN MEANS BECAUSE THEIR MEAN DOES NOT EXIST (RESULTING IN NaN)
+  select( all_of( colnames(.)[ !( apply( ., 2, mean, na.rm = T ) %>% cbind() %>% is.na() ) ] ) ) %>%
+  
+  # put IDs to a column for later merging via full_join()
+  rownames_to_column("id")
 
-# prepare a dataframe with sum scores of each variable of interest
+
+# OVERLAPS PRE-PROCESSING ----
+
+# in this chunk of the script we will rename and shuffle overlap (prediction) data in order for them to be easily integrable
+# with the rest of the data sets
+
+# for fMRI overlaps rename id column, skim redundant variables, tidy-up names and pivot wider
+for( i in paste0("fMRI_",1:2) ) {
+  d3[[i]] <-
+    d3[[i]] %>%
+    `colnames<-`( c("id","template","overlap", "cat") ) %>%
+    select(-cat) %>%
+    mutate( template = sub( ".nii.gz", "", template ) ) %>%
+    pivot_wider( values_from = overlap, names_from = template )
+}
+
+# for the multivariable model rename id column and skim redundant variable
+d3$mulvar <- 
+  d3$mulvar %>%
+  rename( "id" = "Patient" ) %>%
+  select(-X)
+
+# for the multiple predictions model transform id column to canonical form, skim redundant variables and rename columns
+d3$multip <-
+  d3$multip %>%
+  mutate( id = sub( "'","",sub( "sub-","",Patients) ) ) %>%
+  select( -Patients, -X ) %>%
+  `colnames<-`( gsub( ".", "", colnames(.), fixed = T ) )
+
+# collapse or overlap data into a single data frame
+d3 <- reduce( d3, full_join, by = "id" )
 
 
+# SAVE DATA ----
+
+# merge observed data (df) with overlap estimations for predictions (d3) and save the result data set as .csv
+df <- full_join( df, d3, by = "id")
+write.table( x = df, file = "_data/combined_obspred.csv", sep = ",", na = "NA", dec = ".", row.names = F, quote = F )
+
+
+# SESSION INFO ----
+
+# write the sessionInfo() into a .txt file
+capture.output( sessionInfo(), file = "import_envir.txt" )
