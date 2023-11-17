@@ -260,12 +260,25 @@ d3$multip <-
 # collapse or overlap data into a single data frame
 d3 <- reduce( d3, full_join, by = "id" )
 
+# extract and save overlap variables for each wave
+o <- data.frame(
+  predictor = names(d3)[-1],
+  source = c( rep("fMRI",5), rep("multivariate",10), rep("multiple",5), rep("symptom",5) ),
+  response = c( "drsii", "bdi", rep("updrs_iii,mds_updrs_iii",3), # fMRI overlaps (Clemens)
+                "bdi", NA, "bdi", "staix1,staix2", rep("drsii",2), rep(NA,4), # multivariate MRI overlaps (Garance)
+                rep("updrs_iii,mds_updrs_iii",5),
+                "bradykinesia", "rigidity", "axial", "tremor", "updrs_iii,mds_updrs_iii" # symtpom-specific 
+                )
+)
+
+# save it
+write.table( x = o, file = "_data/respred_pairs.csv", sep = ";", na = "NA", row.names = F, quote = F )
 
 # SAVE DATA ----
 
 # merge observed data (df) with overlap estimations for predictions (d3) and save the result data set as .csv
 df <- full_join( df, d3, by = "id")
-write.table( x = df, file = "_data/combined_obspred.csv", sep = ",", na = "NA", dec = ".", row.names = F, quote = F )
+write.table( x = df, file = "_data/combined_respred.csv", sep = ",", na = "NA", dec = ".", row.names = F, quote = F )
 
 
 # SESSION INFO ----
