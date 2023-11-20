@@ -12,204 +12,99 @@ format:
     toc-depth: 3
 ---
 
-In this report I will present results from first few sets of predictions of (one-year) post-surgery changes in measures of cognitive performance (Mattis Dementia Rating Scale, second edition, DRS-2), mood (Beck Depression Inventory, second edition, BDI-II), anxiety (State-trait anxiety inventory, STAIX1 for state and STAIX2 for trait anxiety), and motor symptoms (Movement Disorder Society's Unified Parkinson's Disease Rating Scale, MDS-UPDRS, part III).
+In this report I present results of the first few sets of predictions of (one-year) post-surgery changes in measures of **cognitive performance** (assessed via *Mattis Dementia Rating Scale, second edition, DRS-2*), **mood** (assessed via *Beck Depression Inventory, second edition, BDI-II*), **anxiety** (assessed via *State-trait anxiety inventory, STAIX1* for *state* and *STAIX2* for *trait anxiety*), and **motor symptoms** (assessed via *Movement Disorder Society's Unified Parkinson's Disease Rating Scale, MDS-UPDRS, part III*) as a function of VAT-based overlaps with (dis)favourable (f)MRI maps derived from previous research.
 
 ```{r}
 #| label: set-up
 #| output: false
 #| cache: true
 
-pkgs <- c( "here", "dplyr", "tidyverse", "psych", "corrplot" )
+library(tidyverse) # data wrangling
+library(here) # reading
+#library(apa) # formatting
+library(gt)
 
-# load or install packages as needed
-for ( i in pkgs ) {
-  if ( i %in% rownames( installed.packages() ) == F ) install.packages(i) # install if it is not installed yet
-  if ( i %in% names( sessionInfo()$otherPkgs ) == F ) library( i , character.only = T ) # load if it is not loaded yet
-}
+t1 <- read.csv( here("_tabs","varlabels.csv"), sep = "," ) # variable labels
+colnames(t1) <- c( "Variable name", "Label" )
 
+t2 <- read.csv( here("_tabs","sample_sizes.csv"), sep = "," ) # numbers of observations per variable pair
 
-# IN-HOUSE FUNCTIONS ----
-
-# calculate cases used for analysis
-case_count <- function( out, pred, d0 ) {
-  
-  # extract all outcome values from a data set with predictor present
-  d <- d0[ complete.cases( d0[ ,pred] ), out ]
-  return( length( na.omit(d) ) ) # return number of non-NAs
-  
-}
-
-# plot a correlation matrix
-mat_plot <- function( r, p, col, lab, rect, num = .8, tl = .8, cl = .8, rwd = 1 ) {
-  
-  # extract variable names
-  nm <- sapply( rownames(r), function(i) lab[ lab$var == i , "lab" ], USE.NAMES = F )
-  
-  # rename rows and columns
-  r <- r %>% `rownames<-`(nm) %>% `colnames<-`(nm)
-  p <- p %>% `rownames<-`(nm) %>% `colnames<-`(nm)
-  
-  # prepare a plot with blank spaces for p < .05 and rectangle showing correlations of interest
-  cp <- 
-    corrplot( corr = r, p.mat = p, diag = F, insig = "blank", # inputs + significance handling
-              tl.col = "blue", bg = "gray", col = col(100), addCoef.col = "black", # text and colours
-              tl.srt = 60, tl.cex = tl, number.cex = num, cl.cex = cl, # text sizes and angles
-              method = "circle", type = "lower" # corrmat type
-              ) %>%
-    # add rectangle showing correlations of interest
-    corrRect( namesMat = rect, col = "red", lwd = rwd )
-  
-  # add values to non-significant results
-  with( cp$corrPos, text( x, y, round(corr,2), cex = num ) )
-
-}
-
-# DATA PROCESSING ----
-
-# read the data
-d0 <- read.csv( here("_data","combined_respred.csv"), sep = "," ) # data set
-ids <- c( read.csv( here("_raw","pats_included.csv"), sep = ",", header = F ) )$V1 # patients included so far
-lab <- read.csv( here("_raw","varlabels.csv"), sep = "," ) # variables' labels for nicer plots
-map <- read.csv( here("_data","respred_pairs.csv"), sep = ";" ) # mapping of overlaps to responses
-map <- map[ complete.cases(map$response), ]
-
-# extract all responses of interest
-resp <- c( "ledd", na.omit( unlist( lapply( map$response, function(i) strsplit( i, ",") ) ) %>% unique() ) )
-resp <- resp[ c(1,4,5,8:11,2,3,6,7) ]
-
-# prepare a data set for correlations
-# begin by extracting post-minus-pre differences for ledd and psychological variables
-d1 <- with( d0, sapply( setNames( resp[c(1,8:11)], paste0(resp[c(1,8:11)],"_gain") ),
-                        function(i)
-                          sapply( id,
-                                  function(j)
-                                    get( paste0(i,"_r1") )[id==j] - get( paste0(i,"_pre") )[id==j]
-                                  )
-                        )
-            ) %>%
-  
-  # change to data frame
-  as.data.frame()
-
-# add gain scores for MDS UPDRS-III scores
-for ( i in resp[2:7] ) {
-  d1[ , paste0(i,"_gain") ] <- with( d0, get( paste0(i,"_on_off_r1") ) - get( paste0(i,"_none_off_pre") ) ) # gain scores
-  #d1[ , paste0(i,"_eff") ] <- with( d0, get( paste0(i,"_on_off_r1") ) - get( paste0(i,"_off_off_r1") ) ) # stimtest scores
-}
-
-# flip DRS-2 gain scores because they are the only one with inverse interpretation
-d1$drsii_gain <- -d1$drsii_gain
-
-# add overlaps
-with( map, d1[ , predictor ] <<- d0[ , predictor] )
-
-# prepare data sets for each overlap source separately
-d2 <-
-  with(
-    map,
-    
-    # loop through sources
-    lapply(
-      setNames( unique(source), unique(source) ),
-      function(i) {
-        
-        # extract variables of interest
-        v <- c(
-          paste0( unique( unlist( lapply( response[source == i], function(x) strsplit(x,",") ) ) ), "_gain" ),
-          predictor[source == i]
-        )
-          
-        # extract relevant variables and patients
-        return( d1[ids, v] )
-        
-      }
-    )
-  )
-
-# extract correlation matrixes
-corr <-
-  lapply(
-    setNames( names(d2), names(d2) ),
-    function(i) {
-      
-      # compute Spearman's correlation with bootstrapped 95% CIs and p values
-      c <- cor.ci( d2[[i]], n.iter = 1e4, p = .05, method = "spearman", plot = F )
-      
-      # prepare a lower diagonal matrix of p values
-      p <- c$rho
-      diag(p) <- 0
-      p[ upper.tri(p, diag = F) ] <- NA
-      p[ lower.tri(p, diag = F) ] <- c$ci$p
-      
-      # return a list with estimates and p values
-      return( list( rho = c$rho, p = p ) )
-      
-    }
-  )
-
-# list rectangle corners for correlation plots
-corr$fMRI$rect <- rbind( c("DRS-2","Reich","MDS-UPDRS III","Horn comb"), rep(NA,4) )
-corr$multivariate$rect <- rbind( c("BDI-II","Apathy pred","DRS-2","MMSE pred"), rep(NA,4) )
-corr$multiple$rect <- rbind( c("UPDRS III","Fiber","MDS-UPDRS III","Euc. dist"), rep(NA,4) )
-corr$symptom$rect <- rbind( c("Bradyk.","Brad. pred","MDS-UPDRS III","UPDRS pred"), rep(NA,4) )
 ```
 
-The report is divided to sections according to the type of prediction that was used starting with fMRI-connectivity-based predictions from Clemens through multivariate-model-based predictions from Garance to multiple type of predictions from Patricia and symptom-specific predictions from Nanditha. In each section, number of subjects is presented together with Spearman'r Rho correlation matrix where correlations between clinical outcomes and (f)MRI-derived predictions are marked by a red rectangle. Correlations with (bootstrapped) p < .05 (without further adjustment of p-values) are marked by presence of a coloured circle whereby colour and size of the circle indicates strength of the correlation. On the other, correlations with p > .05 are represent by text only.
+>The report is divided to sections according into the type of prediction that was used starting with fMRI-connectivity-based predictions from Clemens, then multivariate-model-based predictions of non-motor symptoms from Garance, followed by multiple types of predictions of motor symptoms from Patricia, and finished by symptom-specific predictions from Nanditha. In each section, number of subjects is reported together with (Spearman's Rho) correlation matrix where correlations between clinical outcomes and (f)MRI-derived predictions are delineated by a red rectangle. Correlations with (bootstrapped) p < .05 (without further adjustment of p-values) are marked by presence of a coloured circle whereby colour and size of the circle indicate direction and strength of the correlation respectively. On the other, correlations with p > .05 are represent by text only.
+
+## Analysed variables
+
+::: {.callout-note}
+All clinical outcomes are being represented as **gain scores** whereby each gain score is calculated as *"score_after_dbs-minus-score_before_dbs"* and scaled in such a way that **higher** and **positive** gain scores correspond to **worsening** of symptoms one year after DBS surgery compared to their pre-surgery level.
+:::
+
+::: {.callout-warning}
+All MDS-UPDRS III gain scores are calculated by subtracting pre-surgery scores sampled in **OFF-medication** condition from (one year) post-surgery sampled in **ON-stimulation/OFF-medication** condition.
+:::
+
+:::{.callout-tip}
+@tbl-voc presents mapping of variables (left column) from the data set to their labels (right column) as presented in correlation matrices.
+:::
+
+```{r}
+#| label: tbl-voc
+#| tbl-cap: Variables' name-to-label mapping
+gt::gt(t1)
+```
 
 ## fMRI predictions
 
 ### Dataset
 
-- DRS-2: N = `r case_count( "drsii_gain", "Cog_Dec_Reich", d2$fMRI)`
-- BDI-II: N = `r case_count( "bdi_gain", "Depression_Siddiqi", d2$fMRI)`
-- UPDRS III: N = `r case_count( "updrs_iii_gain", "PD_Horn_orig", d2$fMRI)`
-- MDS-UPDRS III: N = `r case_count( "mds_updrs_iii_gain", "PD_Horn_orig", d2$fMRI)`
+- DRS-2: N = `r t2["drsii_gain" ,"Cog_Dec_Reich"]`
+- BDI-II: N = `r t2["bdi_gain", "Depression_Siddiqi"]`
+- UPDRS III: N = `r t2["updrs_iii_gain", "PD_Horn_orig"]`
+- MDS-UPDRS III: N = `r t2["mds_updrs_iii_gain", "PD_Horn_orig"]`
 
 ### Correlations
 
-```{r}
-#| label: fig-fMRI
-#| fig-cap: Spearman's correlation from the fMRI prediction data set
-#| warning: false
-
-with( corr$fMRI, mat_plot( r = rho, p = p, col = col, lab = lab, rect = rect, num = .8, tl = .8, cl = .8, rwd = 3 ) )
-```
+![Spearman's correlation matrix for fMRI prediction](../_figs/corrmat_fMRI.jpg){#fig-fMRI}
 
 ## Multivariate predictions
 
 ### Dataset
 
-- DRS-2: N = `r case_count( "drsii_gain", "MOCA_Total_abs", d2$multivariate)`
-- BDI-II: N = `r case_count( "bdi_gain", "BDI_Total_abs", d2$multivariate)`
-- STAIX1: N = `r case_count( "staix1_gain", "GAI_Total_abs", d2$multivariate)`
-- STAIX2: N = `r case_count( "staix2_gain", "GAI_Total_abs", d2$multivariate)`
+- DRS-2: N = `r t2["drsii_gain", "MOCA_Total_abs"]`
+- BDI-II: N = `r t2["bdi_gain", "BDI_Total_abs"]`
+- STAIX1: N = `r t2["staix1_gain", "GAI_Total_abs"]`
+- STAIX2: N = `r t2["staix2_gain", "GAI_Total_abs"]`
 
 ### Correlations
 
-```{r}
-#| label: fig-multiv
-#| fig-cap: Spearman's correlation from the multivartiate non-motor prediction data set
-#| warning: false
-
-with( corr$multivariate, mat_plot( r = rho, p = p, col = col, lab = lab, rect = rect, num = .8, tl = .8, cl = .8, rwd = 3 ) )
-```
-
+![Spearman's correlation matrix for multivariate prediction of non-motor symptoms](../_figs/corrmat_multivariate.jpg){#fig-multivar}
 
 ## Multiple predictions
 
 ### Dataset
 
-### Dataset
-
-- UPDRS III: N = `r case_count( "updrs_iii_gain", "FiberScores", d2$multiple)`
-- MDS-UPDRS III: N = `r case_count( "mds_updrs_iii_gain", "FiberScores", d2$multiple)`
+- UPDRS III: N = `r t2["updrs_iii_gain", "FiberScores"]`
+- MDS-UPDRS III: N = `r t2["mds_updrs_iii_gain", "FiberScores"]`
 
 ### Correlations
 
-```{r}
-#| label: fig-multip
-#| fig-cap: Spearman's correlation from the multiple motor symptoms prediction data set
-#| warning: false
+![Spearman's correlation matrix for multiple models motor symptoms prediction](../_figs/corrmat_multiple.jpg){#fig-multip}
 
-with( corr$multiple, mat_plot( r = rho, p = p, col = col, lab = lab, rect = rect, num = .8, tl = .8, cl = .8, rwd = 3 ) )
-```
+## Symptom-specific predictions
+
+### Dataset
+
+- Bradykinesia: N = `r t2["bradykinesia_gain", "BradykinesiaPred"]`
+- Rigidity: N = `r t2["rigidity_gain", "RigidityPred"]`
+- Axial symptoms: N = `r t2["axial_gain", "AxialGaitPred"]`
+- Tremor: N = `r t2["tremor_gain", "TremorPredictions"]`
+- UPDRS III: N = `r t2["updrs_iii_gain", "UPDRSpredictions"]`
+- MDS-UPDRS III: N = `r t2["mds_updrs_iii_gain", "UPDRSpredictions"]`
+
+### Correlations
+
+![Spearman's correlation matrix for symptom-specific prediction](../_figs/corrmat_symptom.jpg){#fig-symp}
+
+## Full correlation matrix
+
+![Spearman's correlation matrix of the full dataset](../_figs/corrmat_full.jpg){#fig-full}
