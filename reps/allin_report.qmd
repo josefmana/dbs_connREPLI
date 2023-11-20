@@ -3,6 +3,8 @@ title: "Post-DBS prediction using the volume of activated tissue"
 author: "Josef Mana"
 date: "`r Sys.Date()`"
 title-block-banner: true
+execute:
+  echo: false
 format:
   html: 
     self-contained: true
@@ -17,18 +19,16 @@ In this report I present results of the first few sets of predictions of (one-ye
 ```{r}
 #| label: set-up
 #| output: false
-#| cache: true
 
-library(tidyverse) # data wrangling
-library(here) # reading
-#library(apa) # formatting
-library(gt)
+library(tidyverse) # data wranggling
+library(here) # data reading
+library(gt) # table formatting
 
-t1 <- read.csv( here("_tabs","varlabels.csv"), sep = "," ) # variable labels
-colnames(t1) <- c( "Variable name", "Label" )
-
-t2 <- read.csv( here("_tabs","sample_sizes.csv"), sep = "," ) # numbers of observations per variable pair
-
+t1 <- read.csv( here("_tabs","sample_sizes.csv"), sep = "," ) # numbers of observations per variable pair
+t2 <- read.csv( here("_tabs","varlabels.csv"), sep = "," ) %>% `colnames<-`( c( "Variable name", "Label" ) )
+t3 <- read.csv( here("_tabs","unused.csv"), sep = ",", header = F ) %>%
+  `colnames<-`( c("Variable","unused cases") ) %>%
+  filter( `unused cases` != 0 )
 ```
 
 >The report is divided to sections according into the type of prediction that was used starting with fMRI-connectivity-based predictions from Clemens, then multivariate-model-based predictions of non-motor symptoms from Garance, followed by multiple types of predictions of motor symptoms from Patricia, and finished by symptom-specific predictions from Nanditha. In each section, number of subjects is reported together with (Spearman's Rho) correlation matrix where correlations between clinical outcomes and (f)MRI-derived predictions are delineated by a red rectangle. Correlations with (bootstrapped) p < .05 (without further adjustment of p-values) are marked by presence of a coloured circle whereby colour and size of the circle indicate direction and strength of the correlation respectively. On the other, correlations with p > .05 are represent by text only.
@@ -50,17 +50,18 @@ All MDS-UPDRS III gain scores are calculated by subtracting pre-surgery scores s
 ```{r}
 #| label: tbl-voc
 #| tbl-cap: Variables' name-to-label mapping
-gt::gt(t1)
+
+gt::gt(t2)
 ```
 
 ## fMRI predictions
 
 ### Dataset
 
-- DRS-2: N = `r t2["drsii_gain" ,"Cog_Dec_Reich"]`
-- BDI-II: N = `r t2["bdi_gain", "Depression_Siddiqi"]`
-- UPDRS III: N = `r t2["updrs_iii_gain", "PD_Horn_orig"]`
-- MDS-UPDRS III: N = `r t2["mds_updrs_iii_gain", "PD_Horn_orig"]`
+- DRS-2: N = `r t1["drsii_gain" ,"Cog_Dec_Reich"]`
+- BDI-II: N = `r t1["bdi_gain", "Depression_Siddiqi"]`
+- UPDRS III: N = `r t1["updrs_iii_gain", "PD_Horn_orig"]`
+- MDS-UPDRS III: N = `r t1["mds_updrs_iii_gain", "PD_Horn_orig"]`
 
 ### Correlations
 
@@ -70,10 +71,10 @@ gt::gt(t1)
 
 ### Dataset
 
-- DRS-2: N = `r t2["drsii_gain", "MOCA_Total_abs"]`
-- BDI-II: N = `r t2["bdi_gain", "BDI_Total_abs"]`
-- STAIX1: N = `r t2["staix1_gain", "GAI_Total_abs"]`
-- STAIX2: N = `r t2["staix2_gain", "GAI_Total_abs"]`
+- DRS-2: N = `r t1["drsii_gain", "MOCA_Total_abs"]`
+- BDI-II: N = `r t1["bdi_gain", "BDI_Total_abs"]`
+- STAIX1: N = `r t1["staix1_gain", "GAI_Total_abs"]`
+- STAIX2: N = `r t1["staix2_gain", "GAI_Total_abs"]`
 
 ### Correlations
 
@@ -83,8 +84,8 @@ gt::gt(t1)
 
 ### Dataset
 
-- UPDRS III: N = `r t2["updrs_iii_gain", "FiberScores"]`
-- MDS-UPDRS III: N = `r t2["mds_updrs_iii_gain", "FiberScores"]`
+- UPDRS III: N = `r t1["updrs_iii_gain", "FiberScores"]`
+- MDS-UPDRS III: N = `r t1["mds_updrs_iii_gain", "FiberScores"]`
 
 ### Correlations
 
@@ -94,12 +95,12 @@ gt::gt(t1)
 
 ### Dataset
 
-- Bradykinesia: N = `r t2["bradykinesia_gain", "BradykinesiaPred"]`
-- Rigidity: N = `r t2["rigidity_gain", "RigidityPred"]`
-- Axial symptoms: N = `r t2["axial_gain", "AxialGaitPred"]`
-- Tremor: N = `r t2["tremor_gain", "TremorPredictions"]`
-- UPDRS III: N = `r t2["updrs_iii_gain", "UPDRSpredictions"]`
-- MDS-UPDRS III: N = `r t2["mds_updrs_iii_gain", "UPDRSpredictions"]`
+- Bradykinesia: N = `r t1["bradykinesia_gain", "BradykinesiaPred"]`
+- Rigidity: N = `r t1["rigidity_gain", "RigidityPred"]`
+- Axial symptoms: N = `r t1["axial_gain", "AxialGaitPred"]`
+- Tremor: N = `r t1["tremor_gain", "TremorPredictions"]`
+- UPDRS III: N = `r t1["updrs_iii_gain", "UPDRSpredictions"]`
+- MDS-UPDRS III: N = `r t1["mds_updrs_iii_gain", "UPDRSpredictions"]`
 
 ### Correlations
 
@@ -107,4 +108,22 @@ gt::gt(t1)
 
 ## Full correlation matrix
 
+:::{.callout-note}
+Below I present a (Spearman's Rho) correlation matrix of all included variables (with LEDD gain added) to show overall correlation pattern. In @fig-full all correlations are compute via a pairwise complete case approach to missing values.
+:::
+
 ![Spearman's correlation matrix of the full dataset](../_figs/corrmat_full.jpg){#fig-full}
+
+
+## Potential to add patients
+
+:::{.callout-tip}
+Finally, I present number of patients that have their *postop-minus-preop* clinical data available in our database but were not included yet. These numbers represent the upper estimate of the number of patient which could be in principle added to the data set (if their MRI and CT data is available).
+:::
+
+```{r}
+#| label: tbl-unused
+#| tbl-cap: Number of patients who may be included
+
+gt::gt(t3)
+```

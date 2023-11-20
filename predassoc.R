@@ -223,3 +223,19 @@ cor(d1, use = "pairwise.complete.obs", method = "spearman") %>%
 
 # save it
 dev.off()
+
+
+# NEW PATIENTS ----
+
+# prepare a data set with new patients that were not yet included
+d3 <- d1[ min( which( rownames(d1) %in% ids ) ):nrow(d1) , ] # keep only newly operated patients
+d3 <- d3[ !rownames(d3) %in% ids, ] # drop already included patients
+
+# calculate the number of unused subjects with clinical data and save it
+apply( d3, 2, function(x) sum( !is.na(x) ) ) %>% write.table( file = "_tabs/unused.csv", sep = ",", col.names = F, quote = F )
+
+
+# SESSION INFO ----
+
+# write the sessionInfo() into a .txt file
+capture.output( sessionInfo(), file = "predassoc_envir.txt" )

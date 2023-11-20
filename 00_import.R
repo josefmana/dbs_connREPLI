@@ -186,7 +186,7 @@ for ( i in mot$scale[-1] ) d1[[i]] <- d1$mds_updrs_iii[ with( mot, unlist( strsp
 # ---- prepare a wide dataframe with outcomes ----
 
 # prepare a dataframe with sum scores of each psychological variable of interest
-df <- lapply( with( psy, setNames(scale,scale) ), function(i) sapply( c("pre","r1"), function(j) colSums( d1[[i]][ ,j, ] ) ) )
+df <- lapply( with( psy, setNames(scale,scale) ), function(i) sapply( c("pre","r1"), function(j) colSums( d1[[i]][ ,j, ], na.rm = F ) ) )
 
 # add to df MDS UPDRS-III (sub)scales
 for ( i in mot$scale ) {
@@ -200,7 +200,7 @@ for ( i in mot$scale ) {
           with( dimnames(d1[[i]]), setNames(medic,medic) ),
           function(k)
             # loop through events last in order for them to be on the tail of final variable names
-            sapply( dimnames(d1[[i]])$event, function(l) colSums( d1[[i]][ ,j,k,l, ] )  )
+            sapply( dimnames(d1[[i]])$event, function(l) colSums( d1[[i]][ ,j,k,l, ], na.rm = F )  )
         )
     ) %>%
     
