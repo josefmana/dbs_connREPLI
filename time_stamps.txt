@@ -1,6 +1,0 @@
-23-Dec-2022: Coregistration of sixty-two patients took 01:35:58 (hh:mm:ss).
-25-Dec-2022: Normalization (with brainshift correction) of sixty-two patients took 27:49:26 (hh:mm:ss).
-27-Dec-2022: Pre-reconstruction (via PaCER) of sixty-two patients took 01:41:31 (hh:mm:ss).
-05-Jan-2023: Coregistration of fourteen patients took 00:21:39 (hh:mm:ss).
-05-Jan-2023: Normalization (with brainshift correction) of fourteen patients took 06:24:25 (hh:mm:ss).
-07-Jan-2023: Pre-reconstruction (via PaCER) of fifteen patients took 00:14:41 (hh:mm:ss).

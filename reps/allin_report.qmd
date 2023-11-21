@@ -118,7 +118,7 @@ Below I present a (Spearman's Rho) correlation matrix of all included variables 
 ## Potential to add patients
 
 :::{.callout-tip}
-Finally, I present number of patients that have their *postop-minus-preop* clinical data available in our database but were not included yet. These numbers represent the upper estimate of the number of patient which could be in principle added to the data set (if their MRI and CT data is available).
+Finally, I present number of patients that have their *postop-minus-preop* clinical data available in our database but were not included yet. These numbers represent the upper bound estimate of the number of patient which could be in principle added to the data set (if their MRI and CT data is available).
 :::
 
 ```{r}
