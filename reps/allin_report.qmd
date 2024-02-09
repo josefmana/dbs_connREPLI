@@ -20,7 +20,7 @@ In this report I present results of the first few sets of predictions of (one-ye
 #| label: set-up
 #| output: false
 
-library(tidyverse) # data wranggling
+library(tidyverse) # data wrangling
 library(here) # data reading
 library(gt) # table formatting
 
